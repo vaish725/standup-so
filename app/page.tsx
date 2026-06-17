@@ -81,9 +81,32 @@ export default function Page() {
   async function onGenerate() {
     setGenerating(true)
     setCopied(false)
-    // small delay to simulate network/AI
-    await new Promise(r => setTimeout(r, 350))
+    // Attempt server-side generation first
+    const payload = mode === 'guided' ? { mode: 'guided', tone, yesterday: yesterdayInput, today: todayInput, blocked: blockedInput } : { mode: 'brain', tone, brain: brainDump }
 
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.ok && data?.result) {
+          const formatted = formatAsStandup(data.result)
+          setOutput(formatted)
+          setGenerating(false)
+          return
+        }
+      }
+    } catch (e) {
+      // fall through to local simulator
+      console.warn('server generate failed, falling back to local simulator', e)
+    }
+
+    // fallback: local simulator
+    await new Promise(r => setTimeout(r, 200))
     const raw = mode === 'guided' ? { yesterday: yesterdayInput, today: todayInput, blocked: blockedInput } : { brain: brainDump }
     const structured = generateStructured(tone, raw)
     const formatted = formatAsStandup(structured)
