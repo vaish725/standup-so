@@ -1,9 +1,16 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 
 type Mode = 'guided' | 'brain'
 type Tone = 'professional' | 'casual' | 'very-brief' | 'add-context'
+
+const TONES: { id: Tone; label: string }[] = [
+  { id: 'professional', label: 'Professional' },
+  { id: 'casual', label: 'Casual' },
+  { id: 'very-brief', label: 'Very brief' },
+  { id: 'add-context', label: 'Add context' }
+]
 
 export default function Page() {
   const [mode, setMode] = useState<Mode>('brain')
@@ -145,74 +152,210 @@ export default function Page() {
     setOutput('')
   }, [mode, tone])
 
+  const hasInput = mode === 'guided' ? (yesterdayInput || todayInput || blockedInput) : brainDump
+
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
-        <header className="mb-6">
-          <h1 className="text-3xl font-bold">standup.so</h1>
-          <p className="mt-2 text-gray-600">Turn your brain dump into a clean standup post in 10 seconds.</p>
+    <main className="min-h-screen bg-background">
+      {/* Top accent bar */}
+      <div className="h-1 w-full bg-primary" aria-hidden="true" />
+
+      <div className="mx-auto w-full max-w-3xl px-5 py-10 md:py-16">
+        {/* Header */}
+        <header className="mb-10 flex flex-col items-start gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m9 11 3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+              standup<span className="text-primary">.so</span>
+            </h1>
+          </div>
+          <p className="text-pretty text-base leading-relaxed text-muted-foreground md:text-lg">
+            Turn your brain dump into a clean standup post in 10 seconds.
+          </p>
         </header>
 
-        <section className="bg-white p-6 rounded shadow">
-          <div className="flex gap-3 mb-4">
-            <button className={`px-3 py-1 rounded ${mode === 'brain' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`} onClick={() => setMode('brain')}>Brain dump</button>
-            <button className={`px-3 py-1 rounded ${mode === 'guided' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`} onClick={() => setMode('guided')}>Guided</button>
-            <div className="ml-auto text-sm text-gray-500">Tone:</div>
-            <div className="flex gap-2">
-              <button className={`px-2 py-1 rounded ${tone === 'professional' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setTone('professional')}>Professional</button>
-              <button className={`px-2 py-1 rounded ${tone === 'casual' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setTone('casual')}>Casual</button>
-              <button className={`px-2 py-1 rounded ${tone === 'very-brief' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setTone('very-brief')}>Very brief</button>
-              <button className={`px-2 py-1 rounded ${tone === 'add-context' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setTone('add-context')}>Add context</button>
+        {/* Composer card */}
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+          {/* Mode toggle + Tone */}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="inline-flex rounded-xl bg-muted p-1" role="tablist" aria-label="Input mode">
+              {(['brain', 'guided'] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  role="tab"
+                  aria-selected={mode === m}
+                  onClick={() => setMode(m)}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                    mode === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {m === 'brain' ? 'Brain dump' : 'Guided'}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tone</span>
+              <div className="flex flex-wrap gap-1.5">
+                {TONES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTone(t.id)}
+                    aria-pressed={tone === t.id}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      tone === t.id
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div>
+          {/* Inputs */}
+          <div className="mt-5">
             {mode === 'guided' ? (
-              <div className="grid grid-cols-1 gap-3">
-                <label className="block">
-                  <div className="text-sm font-medium">Yesterday</div>
-                  <textarea className="mt-1 w-full border rounded p-2" rows={2} value={yesterdayInput} onChange={e => setYesterdayInput(e.target.value)} placeholder="What did you finish?" />
-                </label>
-                <label className="block">
-                  <div className="text-sm font-medium">Today</div>
-                  <textarea className="mt-1 w-full border rounded p-2" rows={2} value={todayInput} onChange={e => setTodayInput(e.target.value)} placeholder="What are you doing today?" />
-                </label>
-                <label className="block">
-                  <div className="text-sm font-medium">Blocked</div>
-                  <textarea className="mt-1 w-full border rounded p-2" rows={1} value={blockedInput} onChange={e => setBlockedInput(e.target.value)} placeholder="Anything blocking you?" />
-                </label>
+              <div className="grid grid-cols-1 gap-4">
+                <Field label="Yesterday" hint="What did you finish?">
+                  <textarea
+                    className="w-full resize-none rounded-xl border border-input bg-background p-3 text-sm leading-relaxed text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/50"
+                    rows={2}
+                    value={yesterdayInput}
+                    onChange={e => setYesterdayInput(e.target.value)}
+                    placeholder="Shipped the new dashboard, reviewed two PRs..."
+                  />
+                </Field>
+                <Field label="Today" hint="What are you doing today?">
+                  <textarea
+                    className="w-full resize-none rounded-xl border border-input bg-background p-3 text-sm leading-relaxed text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/50"
+                    rows={2}
+                    value={todayInput}
+                    onChange={e => setTodayInput(e.target.value)}
+                    placeholder="Wire up the API, write tests..."
+                  />
+                </Field>
+                <Field label="Blocked" hint="Anything blocking you?">
+                  <textarea
+                    className="w-full resize-none rounded-xl border border-input bg-background p-3 text-sm leading-relaxed text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/50"
+                    rows={1}
+                    value={blockedInput}
+                    onChange={e => setBlockedInput(e.target.value)}
+                    placeholder="Waiting on design specs..."
+                  />
+                </Field>
               </div>
             ) : (
-              <label className="block">
-                <div className="text-sm font-medium">Brain dump</div>
-                <textarea className="mt-1 w-full border rounded p-2" rows={6} value={brainDump} onChange={e => setBrainDump(e.target.value)} placeholder="Paste whatever's in your head..." />
-              </label>
+              <Field label="Brain dump" hint="Paste whatever's in your head">
+                <textarea
+                  className="w-full resize-y rounded-xl border border-input bg-background p-3 font-mono text-sm leading-relaxed text-foreground outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/50"
+                  rows={7}
+                  value={brainDump}
+                  onChange={e => setBrainDump(e.target.value)}
+                  placeholder="Paste whatever's in your head..."
+                />
+              </Field>
             )}
           </div>
 
-          <div className="flex items-center gap-3 mt-4">
-            <button onClick={onGenerate} className="px-4 py-2 bg-green-600 text-white rounded" disabled={generating}>{generating ? 'Generating...' : 'Generate'}</button>
-            <div className="text-sm text-gray-500">Try an example:</div>
-            <div className="flex gap-2">
+          {/* Actions */}
+          <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              onClick={onGenerate}
+              disabled={generating}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {generating ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.4 0 0 5.4 0 12h4z" />
+                  </svg>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5L13 3Z" />
+                  </svg>
+                  Generate
+                </>
+              )}
+            </button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Try an example:</span>
               {examples.map((_, i) => (
-                <button key={i} onClick={() => useExample(i)} className="px-2 py-1 bg-gray-100 rounded text-sm">Example {i + 1}</button>
+                <button
+                  key={i}
+                  onClick={() => useExample(i)}
+                  className="rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                >
+                  {i + 1}
+                </button>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="mt-6 bg-white p-6 rounded shadow">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-medium">Output</h2>
+        {/* Output */}
+        <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <span className={`inline-block h-2 w-2 rounded-full ${output ? 'bg-accent' : 'bg-border'}`} aria-hidden="true" />
+              Output
+            </h2>
             <div className="flex items-center gap-2">
-              <button onClick={copyOutput} disabled={!output} className="px-3 py-1 bg-blue-600 text-white rounded">{copied ? 'Copied!' : 'Copy'}</button>
-              <button onClick={() => { setOutput(''); setCopied(false) }} className="px-3 py-1 bg-gray-100 rounded">Clear</button>
+              <button
+                onClick={copyOutput}
+                disabled={!output}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" />
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                </svg>
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+              <button
+                onClick={() => { setOutput(''); setCopied(false) }}
+                disabled={!output}
+                className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Clear
+              </button>
             </div>
           </div>
 
-          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded border min-h-[120px]">{output || 'No output yet. Click Generate.'}</pre>
+          <pre className={`min-h-[160px] whitespace-pre-wrap rounded-xl border border-border p-4 font-mono text-sm leading-relaxed ${
+            output ? 'bg-muted/50 text-foreground' : 'bg-muted/30 text-muted-foreground'
+          }`}>
+            {output || 'No output yet. Click Generate to turn your notes into a clean standup post.'}
+          </pre>
         </section>
+
+        <footer className="mt-8 text-center text-xs text-muted-foreground">
+          Built for fast, frictionless standups.
+        </footer>
       </div>
     </main>
+  )
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+        {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+      </div>
+      {children}
+    </label>
   )
 }
