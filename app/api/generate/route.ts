@@ -28,6 +28,86 @@ export async function POST(req: Request) {
   const AI_URL = process.env.AI_API_URL || ''
   const AI_PROVIDER = (process.env.AI_PROVIDER || '').toLowerCase()
 
+  // If provider explicitly set to 'anthropic', use Anthropic Messages API.
+  if (AI_PROVIDER === 'anthropic') {
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || API_KEY
+    const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6'
+
+    if (!ANTHROPIC_KEY) {
+      return NextResponse.json({ ok: true, result: stub })
+    }
+
+    const toneMap: Record<string, string> = {
+      professional: 'Use clear, concise professional language. Active voice. No filler words.',
+      casual: "Use a relaxed, conversational tone. Contractions are fine. First person throughout.",
+      'very-brief': 'Maximum 1 bullet per section. Each bullet under 10 words. No elaboration.',
+      'add-context': 'Add a brief clause of context to each bullet to help stakeholders who are less familiar with the work.'
+    }
+
+    const systemPrompt = `You are a standup post writer for remote engineering and product teams.
+
+Given a raw brain dump or structured answers, return a clean standup post with exactly three sections: Yesterday, Today, Blocked.
+
+Rules:
+- Keep each section to 1-3 bullet points maximum
+- Preserve technical terms and project names exactly
+- If nothing is blocked, return ["None"] for blocked
+- Surface implicit blockers even if not explicitly named
+- Tone: ${toneMap[body.tone] || toneMap.professional}
+
+Return JSON only — no markdown, no explanation:
+{"yesterday": [...], "today": [...], "blocked": [...]}`
+
+    const userContent = body.mode === 'guided'
+      ? `Yesterday: ${body.yesterday || ''}\nToday: ${body.today || ''}\nBlocked: ${body.blocked || ''}`
+      : `Brain dump: ${body.brain || ''}`
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 800,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userContent }]
+        })
+      })
+
+      if (!resp.ok) {
+        const text = await resp.text()
+        console.error('Anthropic error:', text)
+        return NextResponse.json({ ok: true, result: stub })
+      }
+
+      const j = await resp.json()
+      const text = j?.content?.[0]?.text || ''
+
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0])
+          if (parsed && (Array.isArray(parsed.yesterday) || Array.isArray(parsed.today) || Array.isArray(parsed.blocked))) {
+            if (!parsed.blocked || (Array.isArray(parsed.blocked) && parsed.blocked.length === 0)) parsed.blocked = ['None']
+            return NextResponse.json({ ok: true, result: parsed })
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse Anthropic response as JSON', e)
+      }
+
+      console.error('Anthropic did not return valid JSON; returning stub. Raw:', text)
+      return NextResponse.json({ ok: true, result: stub })
+    } catch (err) {
+      console.error('Anthropic fetch failed:', err)
+      return NextResponse.json({ ok: true, result: stub })
+    }
+  }
+
   // If provider explicitly set to 'openai', use OpenAI Chat Completions endpoint.
   if (AI_PROVIDER === 'openai') {
     const OPENAI_KEY = process.env.OPENAI_API_KEY || API_KEY

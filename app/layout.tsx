@@ -16,7 +16,14 @@ export const viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} bg-background antialiased`}>
-      <head />
+      <head>
+        <script async src="https://cdn.novus.ai/tracker.js"></script>
+        <script>
+          window.novus = window.novus || function() { (window.novus.q = window.novus.q || []).push(arguments) };
+          window.novus('init', 'YOUR_NOVUS_PROJECT_ID'); // Replace with actual project ID
+          window.novus('track', 'page_open');
+        </script>
+      </head>
       <body className="font-sans">{children}</body>
     </html>
   )

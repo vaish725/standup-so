@@ -14,6 +14,12 @@ const TONES: { id: Tone; label: string }[] = [
 
 export default function Page() {
   const [mode, setMode] = useState<Mode>('brain')
+
+  const track = (event: string, properties?: Record<string, any>) => {
+    if (typeof window !== 'undefined' && (window as any).novus) {
+      (window as any).novus('track', event, properties);
+    }
+  };
   const [tone, setTone] = useState<Tone>('professional')
 
   // guided inputs
@@ -86,6 +92,7 @@ export default function Page() {
   }
 
   async function onGenerate() {
+    track('generate_clicked', { mode, tone })
     setGenerating(true)
     setCopied(false)
     // Attempt server-side generation first
@@ -126,6 +133,7 @@ export default function Page() {
     try {
       await navigator.clipboard.writeText(output)
       setCopied(true)
+      track('output_copied', { mode, tone })
       setTimeout(() => setCopied(false), 2000)
     } catch (e) {
       console.error('copy failed', e)
@@ -134,8 +142,8 @@ export default function Page() {
 
   function useExample(idx: number) {
     const ex = examples[idx]
+    track('example_used', { index: idx, mode })
     if (mode === 'guided') {
-      // split heuristically into the three fields
       const parts = ex.split(/[.\n]+/).map(s => s.trim()).filter(Boolean)
       setYesterdayInput(parts[0] || '')
       setTodayInput(parts[1] || '')
@@ -188,7 +196,10 @@ export default function Page() {
                   key={m}
                   role="tab"
                   aria-selected={mode === m}
-                  onClick={() => setMode(m)}
+                  onClick={() => {
+                    setMode(m)
+                    track('mode_selected', { mode: m })
+                  }}
                   className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
                     mode === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                   }`}
@@ -204,7 +215,7 @@ export default function Page() {
                 {TONES.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => setTone(t.id)}
+                    onClick={() => { setTone(t.id); track('tone_changed', { tone: t.id }) }}
                     aria-pressed={tone === t.id}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       tone === t.id
