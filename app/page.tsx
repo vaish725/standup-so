@@ -91,12 +91,13 @@ export default function Page() {
     return result
   }
 
-  async function onGenerate() {
-    track('generate_clicked', { mode, tone })
+  async function onGenerate(toneOverride?: Tone) {
+    const effectiveTone = toneOverride ?? tone
+    track('generate_clicked', { mode, tone: effectiveTone })
     setGenerating(true)
     setCopied(false)
     // Attempt server-side generation first
-    const payload = mode === 'guided' ? { mode: 'guided', tone, yesterday: yesterdayInput, today: todayInput, blocked: blockedInput } : { mode: 'brain', tone, brain: brainDump }
+    const payload = mode === 'guided' ? { mode: 'guided', tone: effectiveTone, yesterday: yesterdayInput, today: todayInput, blocked: blockedInput } : { mode: 'brain', tone: effectiveTone, brain: brainDump }
 
     try {
       const res = await fetch('/api/generate', {
@@ -156,9 +157,17 @@ export default function Page() {
   }
 
   useEffect(() => {
-    // clear output when switching modes
     setOutput('')
-  }, [mode, tone])
+  }, [mode])
+
+  useEffect(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const lastVisit = localStorage.getItem('standup_last_visit')
+    if (lastVisit && lastVisit !== today) {
+      track('return_visit', { last_visit: lastVisit })
+    }
+    localStorage.setItem('standup_last_visit', today)
+  }, [])
 
   const hasInput = mode === 'guided' ? (yesterdayInput || todayInput || blockedInput) : brainDump
 
@@ -215,7 +224,11 @@ export default function Page() {
                 {TONES.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => { setTone(t.id); track('tone_changed', { tone: t.id }) }}
+                    onClick={() => {
+                      setTone(t.id)
+                      track('tone_changed', { tone: t.id })
+                      if (output) onGenerate(t.id)
+                    }}
                     aria-pressed={tone === t.id}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                       tone === t.id
@@ -278,7 +291,7 @@ export default function Page() {
           {/* Actions */}
           <div className="mt-5 flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
             <button
-              onClick={onGenerate}
+              onClick={() => onGenerate()}
               disabled={generating}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
