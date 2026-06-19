@@ -20,7 +20,12 @@ export default function Page() {
       (window as any).novus('track', event, properties);
     }
   };
-  const [tone, setTone] = useState<Tone>('professional')
+  const TONES_IDS = TONES.map(t => t.id)
+  const [tone, setTone] = useState<Tone>(() => {
+    if (typeof window === 'undefined') return 'professional'
+    const saved = localStorage.getItem('standup_tone') as Tone | null
+    return saved && TONES_IDS.includes(saved) ? saved : 'professional'
+  })
 
   // guided inputs
   const [yesterdayInput, setYesterdayInput] = useState('')
@@ -226,6 +231,7 @@ export default function Page() {
                     key={t.id}
                     onClick={() => {
                       setTone(t.id)
+                      localStorage.setItem('standup_tone', t.id)
                       track('tone_changed', { tone: t.id })
                       if (output) onGenerate(t.id)
                     }}
