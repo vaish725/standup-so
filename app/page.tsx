@@ -349,6 +349,14 @@ export default function Page() {
           }`}>
             {output || 'No output yet. Click Generate to turn your notes into a clean standup post.'}
           </pre>
+
+          {output ? (
+            <div className="mt-2 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+              <span>{output.length} chars</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-medium text-foreground">{lengthLabel(output)}</span>
+            </div>
+          ) : null}
         </section>
 
         <footer className="mt-8 text-center text-xs text-muted-foreground">
@@ -357,6 +365,13 @@ export default function Page() {
       </div>
     </main>
   )
+}
+
+function lengthLabel(text: string): 'Short' | 'Medium' | 'Long' {
+  const len = text.length
+  if (len < 200) return 'Short'
+  if (len < 450) return 'Medium'
+  return 'Long'
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
