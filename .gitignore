@@ -16,3 +16,4 @@ pnpm-debug.log*
 
 # macOS
 .DS_Store
+*.tsbuildinfo
