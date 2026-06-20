@@ -203,7 +203,19 @@ export default function Page() {
 
   async function onGenerate(toneOverride?: Tone) {
     const effectiveTone = toneOverride ?? tone
-    track('generate_clicked', { mode, tone: effectiveTone })
+    const inputLength = mode === 'guided'
+      ? (yesterdayInput.length + todayInput.length + blockedInput.length)
+      : brainDump.length
+    track('generate_clicked', {
+      mode,
+      tone: effectiveTone,
+      inputLength,
+      ...(mode === 'guided' ? {
+        hasYesterdayInput: yesterdayInput.trim().length > 0,
+        hasTodayInput: todayInput.trim().length > 0,
+        hasBlockedInput: blockedInput.trim().length > 0
+      } : {})
+    })
     setGenerating(true)
     setCopied(false)
     // Attempt server-side generation first
@@ -221,12 +233,29 @@ export default function Page() {
         if (data?.ok && data?.result) {
           const formatted = formatAsStandup(data.result)
           setOutput(formatted)
+          track('standup_generated', {
+            mode,
+            tone: effectiveTone,
+            source: 'ai',
+            outputLength: formatted.length,
+            outputLengthLabel: lengthLabel(formatted),
+            yesterdayItemCount: data.result.yesterday?.length ?? 0,
+            todayItemCount: data.result.today?.length ?? 0,
+            blockedItemCount: data.result.blocked?.length ?? 0,
+            hasBlockers: data.result.blocked?.some((b: string) => b.toLowerCase() !== 'none') ?? false,
+            inputLength
+          })
           setGenerating(false)
           return
         }
       }
     } catch (e) {
-      // fall through to local simulator
+      track('ai_generation_failed', {
+        mode,
+        tone: effectiveTone,
+        errorType: e instanceof Error ? e.name : 'unknown',
+        inputLength
+      })
       console.warn('server generate failed, falling back to local simulator', e)
     }
 
@@ -236,6 +265,18 @@ export default function Page() {
     const structured = generateStructured(effectiveTone, raw)
     const formatted = formatAsStandup(structured)
     setOutput(formatted)
+    track('standup_generated', {
+      mode,
+      tone: effectiveTone,
+      source: 'local',
+      outputLength: formatted.length,
+      outputLengthLabel: lengthLabel(formatted),
+      yesterdayItemCount: structured.yesterday.length,
+      todayItemCount: structured.today.length,
+      blockedItemCount: structured.blocked.length,
+      hasBlockers: structured.blocked.some(b => b.toLowerCase() !== 'none'),
+      inputLength
+    })
     setGenerating(false)
   }
 
@@ -244,7 +285,12 @@ export default function Page() {
     try {
       await navigator.clipboard.writeText(output)
       setCopied(true)
-      track('output_copied', { mode, tone })
+      track('output_copied', {
+        mode,
+        tone,
+        outputLength: output.length,
+        outputLengthLabel: lengthLabel(output)
+      })
       setTimeout(() => setCopied(false), 2000)
     } catch (e) {
       console.error('copy failed', e)
@@ -278,7 +324,10 @@ export default function Page() {
     const today = new Date().toISOString().slice(0, 10)
     const lastVisit = localStorage.getItem('standup_last_visit')
     if (lastVisit && lastVisit !== today) {
-      track('return_visit', { last_visit: lastVisit })
+      const daysSinceLastVisit = Math.floor(
+        (new Date(today).getTime() - new Date(lastVisit).getTime()) / (1000 * 60 * 60 * 24)
+      )
+      track('return_visit', { last_visit: lastVisit, daysSinceLastVisit })
     }
     localStorage.setItem('standup_last_visit', today)
   }, [])
@@ -319,7 +368,7 @@ export default function Page() {
                   aria-selected={mode === m}
                   onClick={() => {
                     setMode(m)
-                    track('mode_selected', { mode: m })
+                    track('mode_selected', { mode: m, previousMode: mode })
                   }}
                   className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
                     mode === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
@@ -339,7 +388,7 @@ export default function Page() {
                     onClick={() => {
                       setTone(t.id)
                       localStorage.setItem('standup_tone', t.id)
-                      track('tone_changed', { tone: t.id })
+                      track('tone_changed', { tone: t.id, previousTone: tone, triggeredRegeneration: !!output })
                       if (output) onGenerate(t.id)
                     }}
                     aria-pressed={tone === t.id}
