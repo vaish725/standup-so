@@ -105,9 +105,34 @@ export default function Page() {
     }
 
     const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s
+    const isMetaDescriptor = (s: string) => /^(alright\s+so\s+)?(today|yesterday)\s+was\b/i.test(s)
 
-    // Truncate a string at the first comma that appears after at least minWords words
-    const truncateAtClause = (s: string, minWords = 6, maxWords = 16): string => {
+    // Core rewrites applied by professional, add-context, and very-brief
+    const rewrite = (s: string): string =>
+      s
+        .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|basically,?\s*|then\s+I?\s*|also\s+I?\s*)/i, '')
+        .replace(/\bfinally\s+/gi, '')
+        .replace(/\blike\s+(\d)/gi, '$1')
+        .replace(/\bkind of\b\s*/gi, '').replace(/\bsort of\b\s*/gi, '')
+        .replace(/\bgot\s+around\s+to\b/gi, 'completed initial work on')
+        .replace(/\bhop(?:ped)?\s+on\b/gi, 'join')
+        .replace(/\bended\s+up\s+being\b/gi, 'identified as')
+        .replace(/\bsat\s+in\s+on\b/gi, 'attended')
+        .replace(/\bnail\s+down\b/gi, 'finalize')
+        .replace(/\bpushing\s+(that\s+)?to\s+tomorrow\b/gi, 'deferred to today')
+        .replace(/\bdidn'?t\s+get\s+to\b/gi, 'did not complete')
+        .replace(/\btook\s+(forever|ages)\b/gi, 'required extended time')
+        .replace(/\bthat\s+took\s+an?\s+hour\s+and\s+a\s+half\b/gi, '(1.5h)')
+        .replace(/\bstill\s+blocked\s+on\b/gi, 'blocked pending')
+        .replace(/\beveryone'?s\s+been\s+asking\s+(about|for)\b/gi, '(widely requested)')
+        .replace(/\bgot\s+maybe\s+(\d+)%\s+done\b/gi, '~$1% complete')
+        .replace(/,?\s*it'?s\s+been\s+sitting\s+with\s+them\s+for\s+(?:like\s+)?(\d+)\s+days.*$/gi, '; pending $1+ days')
+        .replace(/,?\s*I\s+don'?t\s+think\s+anyone'?s\s+even\s+looked\s+at\s+it\.?/gi, '')
+        .replace(/\bstuff\b/gi, 'work').replace(/\bthings\b/gi, 'items')
+        .replace(/\bi\b/g, 'I').replace(/\s{2,}/g, ' ').trim()
+
+    // Truncate at first comma after minWords, fallback to maxWords
+    const truncate = (s: string, minWords = 6, maxWords = 16): string => {
       const words = s.split(' ')
       if (words.length <= maxWords) return s
       let wi = 0
@@ -119,33 +144,15 @@ export default function Page() {
     }
 
     const toProfessional = (lines: string[]): string[] =>
-      lines
-        .filter(s => !/^(alright\s+so\s+)?(today|yesterday)\s+was\b/i.test(s)) // drop meta-descriptors
-        .map(s =>
-          cap(truncateAtClause(s
-            .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|basically,?\s*|then\s+I?\s*|also\s+I?\s*)/i, '')
-            .replace(/\bfinally\s+/gi, '')
-            .replace(/\blike\s+(\d)/gi, '$1')
-            .replace(/\bkind of\b\s*/gi, '')
-            .replace(/\bsort of\b\s*/gi, '')
-            .replace(/\bgot around to\b/gi, 'completed initial work on')
-            .replace(/\bhopped?\s+on\b/gi, 'joined')
-            .replace(/\bended up being\b/gi, 'identified as')
-            .replace(/\bsat in on\b/gi, 'attended')
-            .replace(/\bnail down\b/gi, 'finalize')
-            .replace(/\bpushing\s+(that\s+)?to\s+tomorrow\b/gi, 'deferred to today')
-            .replace(/\bdidn'?t\s+get\s+to\b/gi, 'did not complete')
-            .replace(/\btook\s+(forever|ages)\b/gi, 'required extended time')
-            .replace(/\bthat\s+took\s+an?\s+hour\s+and\s+a\s+half\b/gi, '(1.5h)')
-            .replace(/\bstill\s+blocked\s+on\b/gi, 'blocked pending')
-            .replace(/\beveryone'?s\s+been\s+asking\s+(about|for)\b/gi, '(widely requested)')
-            .replace(/\bgot\s+maybe\s+(\d+)%\s+done\b/gi, '~$1% complete')
-            .replace(/,?\s*it'?s\s+been\s+sitting\s+with\s+them\s+for\s+(?:like\s+)?(\d+)\s+days.*$/gi, '; pending $1+ days')
-            .replace(/,?\s*I\s+don'?t\s+think\s+anyone'?s\s+even\s+looked\s+at\s+it\.?/gi, '')
-            .replace(/\bstuff\b/gi, 'work').replace(/\bthings\b/gi, 'items')
-            .replace(/\bi\b/g, 'I').replace(/\s{2,}/g, ' ').trim()
-          ))
-        ).filter(Boolean)
+      lines.filter(s => !isMetaDescriptor(s))
+           .map(s => cap(truncate(rewrite(s))))
+           .filter(Boolean)
+
+    // Add context = professional rewrites WITHOUT truncation — the full cleaned sentence is the context
+    const toAddContext = (lines: string[]): string[] =>
+      lines.filter(s => !isMetaDescriptor(s))
+           .map(s => cap(rewrite(s)))
+           .filter(Boolean)
 
     const toCasual = (lines: string[]): string[] =>
       lines.map(s =>
@@ -158,17 +165,22 @@ export default function Page() {
       ).filter(Boolean)
 
     const toVeryBrief = (lines: string[]): string[] => {
-      const s = lines[0]
+      // skip meta-descriptors, take first meaningful line
+      const meaningful = lines.filter(s => !isMetaDescriptor(s))
+      const s = meaningful[0] || lines[0]
       if (!s) return []
-      // Strip time preambles then take up to first comma, capped at 8 words
-      const stripped = s
-        .replace(/^spent\s+(?:like\s+)?\d+\+?\s*h(?:our)?s?\s+(?:\w+\s+the\s+\w+\s+)?on\s+(?:the\s+|that\s+)?/i, '')
-        .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|also,?\s*|then\s+I?\s*)/i, '')
-        .replace(/^(?:finally\s+)?(?:I\s+)?(?:got\s+around\s+to|completed\s+initial\s+work\s+on)\s+/i, '')
-        .replace(/^(writing\s+up\s+)?the\s+/i, '')
+      const r = rewrite(s)
+        // strip action/status prefixes to expose the noun
+        .replace(/^(?:spent\s+\d+\+?\s*h(?:our)?s?\s+(?:\w+\s+the\s+\w+\s+)?on\s+(?:the\s+|that\s+)?)/i, '')
+        .replace(/^(?:did\s+not\s+complete\s+(?:the\s+)?)/i, '')
+        .replace(/^(?:completed\s+initial\s+work\s+on\s+(?:writing\s+up\s+)?(?:the\s+)?)/i, '')
+        .replace(/^(?:attended\s+(?:the\s+)?)/i, '')
+        .replace(/^(?:I'?m?\s+)?blocked\s+pending\s+/i, '')
+        .replace(/\s+I\s+was\s+supposed\s+to\s+(do\s*)?/i, '')
+        .replace(/\s+(?:before|until|while|since)\s+.*/i, '') // cut trailing clauses
+        .split(',')[0]                                         // cut at first comma
         .trim()
-      const beforeComma = stripped.includes(',') ? stripped.slice(0, stripped.indexOf(',')) : stripped
-      return [cap(beforeComma.split(' ').slice(0, 8).join(' '))]
+      return [cap(r.split(' ').slice(0, 10).join(' '))]
     }
 
     const applyTone = (lines: string[]): string[] => {
@@ -176,7 +188,7 @@ export default function Page() {
       switch (effectiveTone) {
         case 'very-brief':   return toVeryBrief(lines)
         case 'casual':       return toCasual(lines)
-        case 'add-context':  return toProfessional(lines).map(s => `${s} — see ticket or Slack`)
+        case 'add-context':  return toAddContext(lines)
         case 'professional':
         default:             return toProfessional(lines)
       }
