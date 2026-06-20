@@ -16,8 +16,8 @@ export default function Page() {
   const [mode, setMode] = useState<Mode>('brain')
 
   const track = (event: string, properties?: Record<string, any>) => {
-    if (typeof window !== 'undefined' && (window as any).novus) {
-      (window as any).novus('track', event, properties);
+    if (typeof window !== 'undefined' && typeof pendo !== 'undefined') {
+      pendo.track(event, properties ?? {})
     }
   };
   const TONES_IDS = TONES.map(t => t.id)
@@ -173,8 +173,6 @@ export default function Page() {
     }
     localStorage.setItem('standup_last_visit', today)
   }, [])
-
-  const hasInput = mode === 'guided' ? (yesterdayInput || todayInput || blockedInput) : brainDump
 
   return (
     <main className="min-h-screen bg-background">
