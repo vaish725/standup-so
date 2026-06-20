@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{
             __html: `
               window.novus = window.novus || function() { (window.novus.q = window.novus.q || []).push(arguments) };
-              window.novus('init', 'YOUR_NOVUS_PROJECT_ID'); // Replace with actual project ID
+              window.novus('init', '9bb510f7-b408-4fc8-92a2-db22ad05cd61'); // Replace with actual project ID
               window.novus('track', 'page_open');
             `
           }}
