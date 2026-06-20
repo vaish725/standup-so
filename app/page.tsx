@@ -52,48 +52,83 @@ export default function Page() {
     return `Yesterday\n${y}\n\nToday\n${t}\n\nBlocked\n${b}`
   }
 
-  function generateStructured(tone: Tone, raw: { yesterday?: string; today?: string; blocked?: string; brain?: string }) {
-    // Very simple local transformation to simulate AI output
-    const toBullets = (text = '') => {
+  function generateStructured(effectiveTone: Tone, raw: { yesterday?: string; today?: string; blocked?: string; brain?: string }) {
+    let yesterdayText = raw.yesterday || ''
+    let todayText = raw.today || ''
+    let blockedText = raw.blocked || ''
+
+    if (raw.brain) {
+      const brain = raw.brain
+      const yMatch = brain.match(/yesterday[:\s]*([\s\S]*?)(?=\n\s*today\b|$)/i)
+      const tMatch = brain.match(/today[:\s]*([\s\S]*?)(?=\n\s*blocked\b|$)/i)
+      const bMatch = brain.match(/blocked[:\s]*([\s\S]*?)$/i)
+      if (yMatch || tMatch || bMatch) {
+        yesterdayText = yMatch?.[1]?.trim() || ''
+        todayText = tMatch?.[1]?.trim() || ''
+        blockedText = bMatch?.[1]?.trim() || ''
+      } else {
+        const sentences = brain.split(/[\n.;]+/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 5)
+        const third = Math.ceil(sentences.length / 3)
+        yesterdayText = sentences.slice(0, third).join('. ')
+        todayText = sentences.slice(third, third * 2).join('. ')
+        blockedText = sentences.slice(third * 2).join('. ')
+      }
+    }
+
+    const toLines = (text: string, max = 3): string[] => {
       if (!text.trim()) return []
-      // split by sentences or semicolons, limit 3
-      const parts = text.split(/[.\n;]+/).map(s => s.trim()).filter(Boolean)
-      return parts.slice(0, 3)
+      const byLine = text.split(/\n/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 2)
+      const parts = byLine.length > 1 ? byLine : text.split(/[.;]/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 2)
+      return parts.slice(0, max)
     }
 
-    let yesterday: string[] = []
-    let today: string[] = []
-    let blocked: string[] = []
+    const stripFiller = (s: string) =>
+      s.replace(/^(alright so,?\s*|ok so,?\s*|also,?\s*|oh and,?\s*|basically,?\s*|well,?\s*)/i, '')
+       .replace(/\blike\s+(\d)/gi, '$1')
+       .replace(/\bkind of\b\s*/gi, '')
+       .replace(/\bsort of\b\s*/gi, '')
+       .replace(/\bi\b/g, 'I')
+       .replace(/\s{2,}/g, ' ')
+       .trim()
 
-    if (mode === 'guided') {
-      yesterday = toBullets(raw.yesterday)
-      today = toBullets(raw.today)
-      blocked = toBullets(raw.blocked)
-    } else {
-      // brain-dump: naive assignment
-      const brain = (raw.brain || '')
-      const sentences = brain.split(/[.\n]+/).map(s => s.trim()).filter(Boolean)
-      yesterday = sentences.slice(0, 2)
-      today = sentences.slice(2, 4)
-      blocked = sentences.slice(4, 6)
+    const cap = (s: string) => s.length ? s[0].toUpperCase() + s.slice(1) : s
+
+    const applyTone = (lines: string[]): string[] => {
+      const cleaned = lines.map(s => cap(stripFiller(s)))
+      switch (effectiveTone) {
+        case 'very-brief':
+          return cleaned.slice(0, 1).map(s => s.split(' ').slice(0, 10).join(' '))
+        case 'casual':
+          return cleaned.map(s =>
+            s.replace(/\bI am\b/g, "I'm")
+             .replace(/\bI will\b/g, "I'll")
+             .replace(/\bdid not\b/g, "didn't")
+             .replace(/\bwas not\b/g, "wasn't")
+             .replace(/\bcannot\b/g, "can't")
+          )
+        case 'add-context':
+          return cleaned.map(s => `${s} — see linked ticket or Slack thread`)
+        case 'professional':
+        default:
+          return cleaned.map(s =>
+            s.replace(/\bgot around to\b/gi, 'completed initial work on')
+             .replace(/\bhopped on\b/gi, 'joined')
+             .replace(/\bended up being\b/gi, 'identified as')
+             .replace(/\bnail down\b/gi, 'finalize')
+             .replace(/\bsat in on\b/gi, 'attended')
+             .replace(/\bpushing (that|this)\b/gi, 'deferring')
+             .replace(/\btook forever\b/gi, 'required extended diagnosis')
+             .replace(/\ba mess\b/gi, 'high context-switching load')
+             .replace(/\bstill blocked on\b/gi, 'pending:')
+          )
+      }
     }
 
-    // Tone modifiers (simple textual transformation)
-    const applyTone = (arr: string[]) => {
-      if (tone === 'very-brief') return arr.slice(0, 1).map(s => s.split(' ').slice(0, 10).join(' '))
-      if (tone === 'casual') return arr.map(s => s.replace(/\bI am\b/g, "I'm")).map(s => s)
-      if (tone === 'add-context') return arr.map(s => `${s} — context: see linked ticket or Slack thread`)
-      // professional
-      return arr.map(s => s.replace(/\bi\b/g, 'I'))
+    return {
+      yesterday: applyTone(toLines(yesterdayText)),
+      today: applyTone(toLines(todayText)),
+      blocked: toLines(blockedText).length ? applyTone(toLines(blockedText)) : ['None']
     }
-
-    const result = {
-      yesterday: applyTone(yesterday),
-      today: applyTone(today),
-      blocked: applyTone(blocked.length ? blocked : ['None'])
-    }
-
-    return result
   }
 
   async function onGenerate(toneOverride?: Tone) {
@@ -128,7 +163,7 @@ export default function Page() {
     // fallback: local simulator
     await new Promise(r => setTimeout(r, 200))
     const raw = mode === 'guided' ? { yesterday: yesterdayInput, today: todayInput, blocked: blockedInput } : { brain: brainDump }
-    const structured = generateStructured(tone, raw)
+    const structured = generateStructured(effectiveTone, raw)
     const formatted = formatAsStandup(structured)
     setOutput(formatted)
     setGenerating(false)
