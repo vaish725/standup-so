@@ -38,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     z=e.getElementsByTagName(n)[0];z.parentNode.insertBefore(y,z);})(window,document,'script','pendo');
 })('9bb510f7-b408-4fc8-92a2-db22ad05cd61');
 
-pendo.initialize({ visitor: { id: '' } });
+pendo.initialize({ visitor: { id: 'anon-' + Math.random().toString(36).slice(2) }, account: { id: 'standup-so' } });
             `
           }}
         />
