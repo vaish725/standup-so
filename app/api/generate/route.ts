@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   }
 
   if (!API_KEY) {
-    return NextResponse.json({ ok: true, result: stub })
+    return NextResponse.json({ ok: false })
   }
 
   const AI_URL = process.env.AI_API_URL || ''
