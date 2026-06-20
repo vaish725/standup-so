@@ -48,16 +48,11 @@ export default function Page() {
   }
 
   function generateStructured(effectiveTone: Tone, raw: { yesterday?: string; today?: string; blocked?: string; brain?: string }) {
-    const extractLines = (text: string, max = 3) =>
-      text.split(/\n/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 2).slice(0, max)
-
-    const extractSentences = (text: string, max = 3) =>
-      text.split(/[.;!]+/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 3).slice(0, max)
-
     const toItems = (text: string, max = 3): string[] => {
       if (!text.trim()) return []
-      const byLine = extractLines(text, max)
-      return byLine.length > 1 ? byLine : extractSentences(text, max)
+      const byLine = text.split(/\n/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 2)
+      const parts = byLine.length > 1 ? byLine : text.split(/[.;!]+/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(s => s.length > 3)
+      return parts.slice(0, max)
     }
 
     let yesterdayItems: string[] = []
@@ -66,8 +61,9 @@ export default function Page() {
 
     if (raw.brain) {
       const brain = raw.brain.trim()
-      // Strategy 1: standalone section headers on their own lines
+
       if (/^(yesterday|today|blocked)\s*:?\s*$/im.test(brain)) {
+        // Strategy 1: standalone section headers on their own lines
         const yBlock = brain.match(/^yesterday\s*:?\s*\n([\s\S]*?)(?=\n[ \t]*(today|blocked)\s*:?\s*$|$)/im)
         const tBlock = brain.match(/^today\s*:?\s*\n([\s\S]*?)(?=\n[ \t]*blocked\s*:?\s*$|$)/im)
         const bBlock = brain.match(/^blocked\s*:?\s*\n([\s\S]*?)$/im)
@@ -75,7 +71,7 @@ export default function Page() {
         todayItems = toItems(tBlock?.[1]?.trim() || '')
         blockedItems = toItems(bBlock?.[1]?.trim() || '')
       } else {
-        // Strategy 2: classify each sentence by keyword signals
+        // Strategy 2: classify sentences by keyword signals
         const sentences = brain
           .split(/[.!\n]+/)
           .map(s => s.replace(/^[-•*]\s*/, '').replace(/^(today|yesterday|blocked)\s*:?\s*/i, '').trim())
@@ -83,11 +79,16 @@ export default function Page() {
 
         for (const s of sentences) {
           const lo = s.toLowerCase()
+          // "today was X" in past tense = describing yesterday, not today
+          const isPastDayDescriptor = /^(alright\s+so\s+)?(today|yesterday)\s+was\b/i.test(s)
           if (/\bno\s+blockers?\b|\bnot\s+blocked\b|\bno\s+issues\b/i.test(s)) {
-            // explicit "no blockers" — leave blockedItems empty so it becomes None
+            // explicit "no blockers" — skip
           } else if (/\bblocked?\b|\bblocking\b|\bwaiting\s+on\b|\bpending\s+(from|on)\b|\bstuck\b/i.test(lo)) {
             blockedItems.push(s)
-          } else if (/\btoday\b|\bthis\s+(morning|afternoon)\b|\bgoing\s+to\b|\bwill\b|\bplanning\b/i.test(lo) && !/\byesterday\b/i.test(lo)) {
+          } else if (/\btomorrow\b|\bpushing\s+(that\s+)?to\b|\bdidn'?t\s+get\s+to\b|\bcouldn'?t\s+get\s+to\b/i.test(lo)) {
+            // deferred work → goes in Today
+            todayItems.push(s)
+          } else if (/\btoday\b|\bthis\s+(morning|afternoon)\b|\bgoing\s+to\b|\bwill\b|\bplanning\b/i.test(lo) && !isPastDayDescriptor && !/\byesterday\b/i.test(lo)) {
             todayItems.push(s)
           } else {
             yesterdayItems.push(s)
@@ -105,59 +106,79 @@ export default function Page() {
 
     const cap = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : s
 
-    // Professional: strip casual language and apply formal rewrites
-    const toProfessional = (lines: string[]): string[] =>
-      lines.map(s =>
-        cap(s
-          .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|basically,?\s*|well,?\s*)/i, '')
-          .replace(/\bfinally\s+/gi, '')
-          .replace(/\blike\s+(\d)/gi, '$1')
-          .replace(/\bkind of\b\s*/gi, '')
-          .replace(/\bsort of\b\s*/gi, '')
-          .replace(/\bgot around to\b/gi, 'completed initial work on')
-          .replace(/\bhopped on\b/gi, 'joined')
-          .replace(/\bended up being\b/gi, 'identified as')
-          .replace(/\bsat in on\b/gi, 'attended')
-          .replace(/\bnail down\b/gi, 'finalize')
-          .replace(/\bpushing (that|this) to\b/gi, 'deferring to')
-          .replace(/\btook (forever|ages)\b/gi, 'required extended time')
-          .replace(/\bstill blocked on\b/gi, 'blocked pending')
-          .replace(/\ba mess\b/gi, 'context-switching overhead')
-          .replace(/\bstuff\b/gi, 'work')
-          .replace(/\bthings\b/gi, 'items')
-          .replace(/\bi\b/g, 'I')
-          .replace(/\s{2,}/g, ' ')
-          .trim()
-        )
-      ).filter(Boolean)
+    // Truncate a string at the first comma that appears after at least minWords words
+    const truncateAtClause = (s: string, minWords = 6, maxWords = 16): string => {
+      const words = s.split(' ')
+      if (words.length <= maxWords) return s
+      let wi = 0
+      for (let i = 0; i < s.length; i++) {
+        if (s[i] === ' ') wi++
+        if (wi >= minWords && s[i] === ',') return s.slice(0, i)
+      }
+      return words.slice(0, maxWords).join(' ')
+    }
 
-    // Casual: preserve the voice, just fix capitalisation and expand/collapse contractions
+    const toProfessional = (lines: string[]): string[] =>
+      lines
+        .filter(s => !/^(alright\s+so\s+)?(today|yesterday)\s+was\b/i.test(s)) // drop meta-descriptors
+        .map(s =>
+          cap(truncateAtClause(s
+            .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|basically,?\s*|then\s+I?\s*|also\s+I?\s*)/i, '')
+            .replace(/\bfinally\s+/gi, '')
+            .replace(/\blike\s+(\d)/gi, '$1')
+            .replace(/\bkind of\b\s*/gi, '')
+            .replace(/\bsort of\b\s*/gi, '')
+            .replace(/\bgot around to\b/gi, 'completed initial work on')
+            .replace(/\bhopped?\s+on\b/gi, 'joined')
+            .replace(/\bended up being\b/gi, 'identified as')
+            .replace(/\bsat in on\b/gi, 'attended')
+            .replace(/\bnail down\b/gi, 'finalize')
+            .replace(/\bpushing\s+(that\s+)?to\s+tomorrow\b/gi, 'deferred to today')
+            .replace(/\bdidn'?t\s+get\s+to\b/gi, 'did not complete')
+            .replace(/\btook\s+(forever|ages)\b/gi, 'required extended time')
+            .replace(/\bthat\s+took\s+an?\s+hour\s+and\s+a\s+half\b/gi, '(1.5h)')
+            .replace(/\bstill\s+blocked\s+on\b/gi, 'blocked pending')
+            .replace(/\beveryone'?s\s+been\s+asking\s+(about|for)\b/gi, '(widely requested)')
+            .replace(/\bgot\s+maybe\s+(\d+)%\s+done\b/gi, '~$1% complete')
+            .replace(/,?\s*it'?s\s+been\s+sitting\s+with\s+them\s+for\s+(?:like\s+)?(\d+)\s+days.*$/gi, '; pending $1+ days')
+            .replace(/,?\s*I\s+don'?t\s+think\s+anyone'?s\s+even\s+looked\s+at\s+it\.?/gi, '')
+            .replace(/\bstuff\b/gi, 'work').replace(/\bthings\b/gi, 'items')
+            .replace(/\bi\b/g, 'I').replace(/\s{2,}/g, ' ').trim()
+          ))
+        ).filter(Boolean)
+
     const toCasual = (lines: string[]): string[] =>
       lines.map(s =>
         cap(s
-          .replace(/\bdid not\b/g, "didn't")
-          .replace(/\bwas not\b/g, "wasn't")
-          .replace(/\bcannot\b/g, "can't")
-          .replace(/\bdo not\b/g, "don't")
-          .replace(/\bI am\b/g, "I'm")
-          .replace(/\bI will\b/g, "I'll")
-          .replace(/\bi\b/g, 'I')
-          .trim()
+          .replace(/\bdid not\b/g, "didn't").replace(/\bwas not\b/g, "wasn't")
+          .replace(/\bcannot\b/g, "can't").replace(/\bdo not\b/g, "don't")
+          .replace(/\bI am\b/g, "I'm").replace(/\bI will\b/g, "I'll")
+          .replace(/\bi\b/g, 'I').replace(/\s{2,}/g, ' ').trim()
         )
       ).filter(Boolean)
+
+    const toVeryBrief = (lines: string[]): string[] => {
+      const s = lines[0]
+      if (!s) return []
+      // Strip time preambles then take up to first comma, capped at 8 words
+      const stripped = s
+        .replace(/^spent\s+(?:like\s+)?\d+\+?\s*h(?:our)?s?\s+(?:\w+\s+the\s+\w+\s+)?on\s+(?:the\s+|that\s+)?/i, '')
+        .replace(/^(alright so,?\s*|ok so,?\s*|oh and,?\s*|also,?\s*|then\s+I?\s*)/i, '')
+        .replace(/^(?:finally\s+)?(?:I\s+)?(?:got\s+around\s+to|completed\s+initial\s+work\s+on)\s+/i, '')
+        .replace(/^(writing\s+up\s+)?the\s+/i, '')
+        .trim()
+      const beforeComma = stripped.includes(',') ? stripped.slice(0, stripped.indexOf(',')) : stripped
+      return [cap(beforeComma.split(' ').slice(0, 8).join(' '))]
+    }
 
     const applyTone = (lines: string[]): string[] => {
       if (!lines.length) return []
       switch (effectiveTone) {
-        case 'very-brief':
-          return [cap(lines[0].replace(/^[-•*]\s*/, '').trim()).split(' ').slice(0, 8).join(' ')]
-        case 'casual':
-          return toCasual(lines)
-        case 'add-context':
-          return toProfessional(lines).map(s => `${s} — see ticket or Slack for context`)
+        case 'very-brief':   return toVeryBrief(lines)
+        case 'casual':       return toCasual(lines)
+        case 'add-context':  return toProfessional(lines).map(s => `${s} — see ticket or Slack`)
         case 'professional':
-        default:
-          return toProfessional(lines)
+        default:             return toProfessional(lines)
       }
     }
 
