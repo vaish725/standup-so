@@ -10,6 +10,35 @@ Built for the [Mind the Product World Product Day Hackathon 2026](https://www.mi
 
 ---
 
+## Screenshots
+
+### Input — brain dump mode
+Paste anything: run-on sentences, notes, half-thoughts. No structure required.
+
+![Brain dump input](imgs/input.jpeg)
+
+### Output — Professional tone
+Filler words stripped, active voice, key action surfaced per section.
+
+![Professional output](imgs/output.jpeg)
+
+### Casual tone
+Preserves your voice and contractions — reads like you wrote it, just cleaner.
+
+![Casual output](imgs/casual-output.jpeg)
+
+### Very brief tone
+One noun phrase per section. Nothing extra.
+
+![Very brief output](imgs/veryBrief-output.jpeg)
+
+### Add context tone
+Full cleaned sentence — secondary clauses surface the why, outcome, or resolution for stakeholders who aren't in the weeds.
+
+![Add context output](imgs/addContext-output.jpeg)
+
+---
+
 ## The problem
 
 Every morning, remote workers stare at a blank Slack field. They know what they did — they just can't figure out how to say it without writing a wall of text nobody reads, or three words that tell nobody anything.
